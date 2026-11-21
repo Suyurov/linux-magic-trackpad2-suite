@@ -1,5 +1,5 @@
 [Unit]
-Description=Four-finger tap to Alt+Space (KRunner)
+Description=Four-finger tap to Launchpad, five-finger tap to Show Desktop
 After=graphical-session.target
 
 [Service]
