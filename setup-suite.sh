@@ -35,7 +35,7 @@ ExecStart=/bin/sh -c 'for d in /sys/class/input/event*; do if grep -q "Apple Inc
 OVR
 
 cat << SUDO | sudo tee /etc/sudoers.d/magic-trackpad-gui >/dev/null
-${REAL_USER} ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/module/hid_magicmouse/parameters/*, /usr/bin/tee /etc/modprobe.d/hid-magicmouse.conf, /usr/bin/tee /etc/linux-3-finger-drag/3fd-config.json, /usr/bin/systemctl restart three-finger-drag.service, /usr/bin/systemctl start three-finger-drag.service, /usr/bin/systemctl stop three-finger-drag.service, /usr/bin/systemctl restart bluetooth
+${REAL_USER} ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/module/hid_magicmouse/parameters/touch_tick, /usr/bin/tee /sys/module/hid_magicmouse/parameters/click1_down, /usr/bin/tee /sys/module/hid_magicmouse/parameters/click1_vib, /usr/bin/tee /sys/module/hid_magicmouse/parameters/force_down, /usr/bin/tee /sys/module/hid_magicmouse/parameters/force_up, /usr/bin/tee /sys/module/hid_magicmouse/parameters/force_vib, /usr/bin/tee /etc/modprobe.d/hid-magicmouse.conf, /usr/bin/tee /etc/linux-3-finger-drag/3fd-config.json, /usr/bin/systemctl restart three-finger-drag.service, /usr/bin/systemctl start three-finger-drag.service, /usr/bin/systemctl stop three-finger-drag.service, /usr/bin/systemctl restart bluetooth
 SUDO
 sudo chmod 0440 /etc/sudoers.d/magic-trackpad-gui
 sudo gpasswd -a "$REAL_USER" input >/dev/null
