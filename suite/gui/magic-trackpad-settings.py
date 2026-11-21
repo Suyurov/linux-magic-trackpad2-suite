@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import sys, glob, json, subprocess, time
+from string import Template
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QSlider, QCheckBox, QPushButton, QFrame,
-                             QMessageBox, QComboBox)
-from PyQt6.QtCore import Qt, QSettings
+                             QLabel, QSlider, QPushButton, QFrame, QMessageBox,
+                             QComboBox, QAbstractButton, QListWidget, QListWidgetItem,
+                             QStackedWidget, QScrollArea)
+from PyQt6.QtCore import Qt, QSettings, QRectF
+from PyQt6.QtGui import QPainter, QColor
 
 PARAM_DIR = "/sys/module/hid_magicmouse/parameters"
 DRAG_CONF = "/etc/linux-3-finger-drag/3fd-config.json"
@@ -12,60 +15,157 @@ LANGS = {"ru": "Русский", "en": "English"}
 
 STRINGS = {
     "ru": {
-        "window_title": "Magic Trackpad 2 — Control Center",
+        "window_title": "Magic Trackpad 2",
         "app_name": "Magic Trackpad 2",
-        "subtitle": "Taptic Engine · Force Touch · Мультитач",
-        "battery": "🔋 {cap}% · {st}",
-        "no_battery": "⚡ Bluetooth / USB активен",
+        "subtitle": "Taptic Engine · Force Touch",
+        "battery": "{cap}% · {st}",
+        "no_battery": "Bluetooth / USB",
         "ms": "мс",
-        "card_taptic": "Taptic Engine и Force Touch",
-        "chk_tick": "Тактильный микро-отклик при касании каждым пальцем",
-        "sl_tick_strength": "Сила вибрации при касании",
-        "sl_click_thr": "Усилие 1-го клика (порог)",
-        "sl_click_vib": "Сила вибрации 1-го клика",
-        "sl_force_thr": "Усилие Force Touch (2-й клик)",
-        "sl_force_vib": "Сила вибрации Force Touch",
-        "card_gestures": "Жесты и перетаскивание",
-        "chk_drag": "Перетаскивание окон и выделение текста 3 пальцами",
-        "sl_drag_speed": "Скорость перетаскивания",
-        "sl_drag_delay": "Задержка отпускания пальцев",
-        "chk_tap": "Тап 4 пальцами → Launchpad   |   Тап 5 пальцами → Рабочий стол",
+        "nav_taptic": "Taptic Engine",
+        "nav_gestures": "Жесты",
+        "nav_general": "Основные",
+        "grp_touch": "Касание",
+        "grp_click": "Клик",
+        "grp_force": "Force Touch",
+        "grp_drag": "Перетаскивание",
+        "grp_taps": "Тапы",
+        "grp_interface": "Интерфейс",
+        "chk_tick": "Тактильный отклик при касании",
+        "sl_tick_strength": "Сила отклика",
+        "sl_click_thr": "Усилие нажатия",
+        "sl_click_vib": "Сила вибрации",
+        "sl_force_thr": "Усилие нажатия",
+        "sl_force_vib": "Сила вибрации",
+        "chk_drag": "Перетаскивание тремя пальцами",
+        "sl_drag_speed": "Скорость",
+        "sl_drag_delay": "Задержка отпускания",
+        "chk_tap": "Тап 4 пальцами → Launchpad, 5 → Рабочий стол",
+        "lang_label": "Язык",
+        "note_touch": "Короткий тик каждый раз, когда палец касается поверхности.",
+        "note_click": "Меньшее усилие означает, что клик срабатывает легче.",
+        "note_force": "Более сильное нажатие для второго, глубокого клика.",
+        "note_drag": "Перетаскивание и выделение без удержания кнопки.",
+        "note_general": "Выбранный язык сохраняется между запусками.",
         "btn_bt": "Переподключить BT",
         "btn_kde": "Жесты KDE",
-        "btn_save": "Сохранить навсегда",
+        "btn_save": "Сохранить",
         "done_title": "Готово",
-        "done_text": "Службы Bluetooth и трекпада перезапущены!",
+        "done_text": "Службы Bluetooth и трекпада перезапущены.",
         "saved_title": "Сохранено",
-        "saved_text": "Все параметры вибрации, порогов и жестов сохранены навсегда!",
+        "saved_text": "Настройки вибрации, порогов и жестов сохранены.",
     },
     "en": {
-        "window_title": "Magic Trackpad 2 — Control Center",
+        "window_title": "Magic Trackpad 2",
         "app_name": "Magic Trackpad 2",
-        "subtitle": "Taptic Engine · Force Touch · Multi-touch",
-        "battery": "🔋 {cap}% · {st}",
-        "no_battery": "⚡ Bluetooth / USB active",
+        "subtitle": "Taptic Engine · Force Touch",
+        "battery": "{cap}% · {st}",
+        "no_battery": "Bluetooth / USB",
         "ms": "ms",
-        "card_taptic": "Taptic Engine and Force Touch",
-        "chk_tick": "Subtle haptic tick when each finger touches down",
-        "sl_tick_strength": "Touch tick strength",
-        "sl_click_thr": "Click 1 pressure (threshold)",
-        "sl_click_vib": "Click 1 vibration strength",
-        "sl_force_thr": "Force Touch pressure (2nd click)",
-        "sl_force_vib": "Force Touch vibration strength",
-        "card_gestures": "Gestures and dragging",
-        "chk_drag": "Drag windows and select text with 3 fingers",
-        "sl_drag_speed": "Drag speed",
-        "sl_drag_delay": "Finger release delay",
-        "chk_tap": "4-finger tap → Launchpad   |   5-finger tap → Show Desktop",
+        "nav_taptic": "Taptic Engine",
+        "nav_gestures": "Gestures",
+        "nav_general": "General",
+        "grp_touch": "Touch",
+        "grp_click": "Click",
+        "grp_force": "Force Touch",
+        "grp_drag": "Dragging",
+        "grp_taps": "Taps",
+        "grp_interface": "Interface",
+        "chk_tick": "Haptic feedback on touch",
+        "sl_tick_strength": "Feedback strength",
+        "sl_click_thr": "Press pressure",
+        "sl_click_vib": "Vibration strength",
+        "sl_force_thr": "Press pressure",
+        "sl_force_vib": "Vibration strength",
+        "chk_drag": "Three-finger drag",
+        "sl_drag_speed": "Speed",
+        "sl_drag_delay": "Release delay",
+        "chk_tap": "4-finger tap → Launchpad, 5 → Show Desktop",
+        "lang_label": "Language",
+        "note_touch": "A short tick each time a finger touches the surface.",
+        "note_click": "Lower pressure means the click triggers more easily.",
+        "note_force": "A firmer press for the second, deeper click.",
+        "note_drag": "Drag and select without holding the button down.",
+        "note_general": "Your language choice is remembered between launches.",
         "btn_bt": "Reconnect BT",
         "btn_kde": "KDE gestures",
-        "btn_save": "Save permanently",
+        "btn_save": "Save",
         "done_title": "Done",
-        "done_text": "Bluetooth and trackpad services restarted!",
+        "done_text": "Bluetooth and trackpad services restarted.",
         "saved_title": "Saved",
-        "saved_text": "All vibration, threshold and gesture settings saved permanently!",
+        "saved_text": "Vibration, threshold and gesture settings saved.",
     },
 }
+
+# Colour palettes that follow the system light/dark setting (macOS-style).
+DARK = dict(window="#1c1c1e", sidebar="#242426", card="#2c2c2e", sep="#3a3a3c",
+            text="#f5f5f7", sub="#98989d", accent="#0a84ff", accent_hover="#409cff",
+            track_off="#48484a", pill="#3a3a3c", sel="#48484a", btn="#3a3a3c",
+            btn_hover="#48484a", border="#3a3a3c")
+LIGHT = dict(window="#f5f5f7", sidebar="#ebebf0", card="#ffffff", sep="#e5e5ea",
+             text="#1d1d1f", sub="#6e6e73", accent="#007aff", accent_hover="#0066d6",
+             track_off="#d1d1d6", pill="#e9e9ee", sel="#ffffff", btn="#ffffff",
+             btn_hover="#f2f2f7", border="#e5e5ea")
+
+STYLE = Template("""
+QWidget#Root { background: $window; }
+QWidget { font-family: 'SF Pro Text', 'SF Pro Display', 'Inter', 'Noto Sans', 'Cantarell', sans-serif;
+          font-size: 13px; color: $text; }
+QFrame#Sidebar { background: $sidebar; border-right: 1px solid $sep; }
+QLabel#AppTitle { font-size: 15px; font-weight: 700; }
+QLabel#AppSub { color: $sub; font-size: 11px; }
+QLabel#Battery { background: $pill; border-radius: 10px; padding: 5px 10px; font-size: 12px; font-weight: 600; }
+QListWidget#Nav { background: transparent; border: none; outline: none; }
+QListWidget#Nav::item { padding: 7px 12px; border-radius: 8px; margin: 1px 10px; }
+QListWidget#Nav::item:selected { background: $sel; color: $text; font-weight: 600; }
+QListWidget#Nav::item:hover:!selected { background: rgba(128, 128, 128, 0.10); }
+QWidget#Page { background: transparent; }
+QScrollArea { background: transparent; border: none; }
+QLabel#PageTitle { font-size: 24px; font-weight: 700; }
+QLabel#GroupTitle { color: $sub; font-size: 12px; font-weight: 600; padding-left: 4px; }
+QLabel#Note { color: $sub; font-size: 12px; padding-left: 4px; }
+QFrame#Group { background: $card; border-radius: 12px; border: 1px solid $border; }
+QFrame#Sep { background: $sep; border: none; }
+QLabel#Value { color: $sub; min-width: 52px; }
+QSlider::groove:horizontal { height: 4px; background: $track_off; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: $accent; border-radius: 2px; }
+QSlider::handle:horizontal { background: #ffffff; border: 1px solid rgba(0, 0, 0, 0.10);
+                             width: 18px; height: 18px; margin: -7px 0; border-radius: 9px; }
+QPushButton#Secondary { background: $btn; border: 1px solid $border; border-radius: 15px; padding: 6px 16px; }
+QPushButton#Secondary:hover { background: $btn_hover; }
+QPushButton#Primary { background: $accent; color: #ffffff; border: none; border-radius: 15px;
+                      padding: 6px 20px; font-weight: 600; }
+QPushButton#Primary:hover { background: $accent_hover; }
+QComboBox { background: $pill; border: none; border-radius: 8px; padding: 5px 10px; min-width: 130px; }
+QComboBox::drop-down { border: none; width: 18px; }
+QFrame#Footer { background: $window; border-top: 1px solid $sep; }
+""")
+
+
+class Switch(QAbstractButton):
+    """macOS-style toggle switch. Colours come from the theme set on the class."""
+    theme = LIGHT
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCheckable(True)
+        self.setFixedSize(42, 24)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.4)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        track = QColor(self.theme["accent"] if self.isChecked() else self.theme["track_off"])
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(track)
+        p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
+        d = r.height() - 4
+        x = r.right() - d - 2 if self.isChecked() else r.left() + 2
+        p.setBrush(QColor("#ffffff"))
+        p.drawEllipse(QRectF(x, r.top() + 2, d, d))
+        p.end()
 
 
 def T(lang, key, **kw):
@@ -102,22 +202,8 @@ def is_active(s, u=False):
     return subprocess.run(["systemctl"] + (["--user"] if u else []) + ["is-active", "--quiet", s]).returncode == 0
 
 
-STYLE = """
-QWidget { font-family: 'SF Pro Text', 'Inter', sans-serif; font-size: 13px; }
-QLabel#HeaderTitle { font-size: 20px; font-weight: 700; }
-QLabel#Badge { background: rgba(0, 122, 255, 0.14); color: #007AFF; border-radius: 10px; padding: 4px 10px; font-weight: 600; font-size: 12px; }
-QLabel#CardTitle { font-size: 13px; font-weight: 700; color: #007AFF; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-QLabel#ValPill { background: rgba(128, 128, 128, 0.14); border-radius: 6px; padding: 2px 8px; font-weight: 600; min-width: 48px; }
-QFrame#Card { background: rgba(128, 128, 128, 0.07); border: 1px solid rgba(128, 128, 128, 0.18); border-radius: 12px; }
-QFrame#Divider { background: rgba(128, 128, 128, 0.15); max-height: 1px; }
-QSlider::groove:horizontal { height: 5px; background: rgba(128, 128, 128, 0.25); border-radius: 2px; }
-QSlider::sub-page:horizontal { background: #007AFF; border-radius: 2px; }
-QSlider::handle:horizontal { background: white; border: 1px solid rgba(0,0,0,0.2); width: 16px; height: 16px; margin: -6px 0; border-radius: 8px; }
-QPushButton#PrimaryBtn { background: #007AFF; color: white; border-radius: 8px; padding: 9px 18px; font-weight: 600; }
-QPushButton#PrimaryBtn:hover { background: #0063D1; }
-QPushButton#SecBtn { background: rgba(128, 128, 128, 0.12); border: 1px solid rgba(128, 128, 128, 0.2); border-radius: 8px; padding: 9px 14px; }
-QPushButton#SecBtn:hover { background: rgba(128, 128, 128, 0.2); }
-"""
+def detect_theme(app):
+    return DARK if app.palette().window().color().lightness() < 128 else LIGHT
 
 
 class TrackpadApp(QWidget):
@@ -127,79 +213,91 @@ class TrackpadApp(QWidget):
         saved = self.settings.value("lang", DEFAULT_LANG)
         self.lang = saved if saved in LANGS else DEFAULT_LANG
 
-        self.setFixedWidth(530)
-        self.setStyleSheet(STYLE)
-        self.L = {}        # key -> widget that shows STRINGS[key]
-        self.pills = []    # (pill label, slider, formatter)
+        self.theme = detect_theme(QApplication.instance())
+        Switch.theme = self.theme
+        self.setObjectName("Root")
+        self.setStyleSheet(STYLE.substitute(self.theme))
+        self.resize(820, 600)
+        self.setMinimumSize(760, 560)
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(22, 20, 22, 20)
-        root.setSpacing(16)
+        self.L = {}        # key -> list of widgets that show STRINGS[key]
+        self.pills = []    # (value label, slider, formatter)
+        self.nav_items = []
 
-        # Header
-        hdr = QHBoxLayout()
-        title_box = QVBoxLayout(); title_box.setSpacing(2)
-        self.L["app_name"] = QLabel(); self.L["app_name"].setObjectName("HeaderTitle")
-        self.L["subtitle"] = QLabel(); self.L["subtitle"].setStyleSheet("color: #888; font-size: 12px;")
-        title_box.addWidget(self.L["app_name"]); title_box.addWidget(self.L["subtitle"])
-        self.badge = QLabel(); self.badge.setObjectName("Badge")
+        # ---- sidebar ----
+        side = QFrame(); side.setObjectName("Sidebar"); side.setFixedWidth(210)
+        sl = QVBoxLayout(side); sl.setContentsMargins(12, 22, 12, 16); sl.setSpacing(0)
+        title = QLabel(); title.setObjectName("AppTitle"); self.register("app_name", title)
+        sub = QLabel(); sub.setObjectName("AppSub"); sub.setWordWrap(True); self.register("subtitle", sub)
+        sl.addWidget(title); sl.addWidget(sub); sl.addSpacing(18)
+
+        self.nav = QListWidget(); self.nav.setObjectName("Nav")
+        self.nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        for key in ("nav_taptic", "nav_gestures", "nav_general"):
+            item = QListWidgetItem(); self.nav.addItem(item); self.nav_items.append((item, key))
+        sl.addWidget(self.nav, 1)
+
+        self.battery = QLabel(); self.battery.setObjectName("Battery")
+        sl.addWidget(self.battery, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # ---- pages ----
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.page("nav_taptic", [
+            self.section("grp_touch", [
+                self.switch_row("chk_tick", "chk_tick", read_param("touch_tick", 18) > 0),
+                self.slider_row("sl_tick_strength", 6, 35, read_param("touch_tick", 18) or 18),
+            ], note="note_touch"),
+            self.section("grp_click", [
+                self.slider_row("sl_click_thr", 70, 160, read_param("click1_down", 120)),
+                self.slider_row("sl_click_vib", 15, 63, read_param("click1_vib", 63)),
+            ], note="note_click"),
+            self.section("grp_force", [
+                self.slider_row("sl_force_thr", 150, 245, read_param("force_down", 208)),
+                self.slider_row("sl_force_vib", 20, 63, read_param("force_vib", 63)),
+            ], note="note_force"),
+        ]))
+
+        try: dc = json.load(open(DRAG_CONF))
+        except Exception: dc = {"acceleration": 1.0, "dragEndDelay": 150}
+        self.stack.addWidget(self.page("nav_gestures", [
+            self.section("grp_drag", [
+                self.switch_row("chk_drag", "chk_drag", is_active("three-finger-drag.service")),
+                self.slider_row("sl_drag_speed", 5, 25, int(round(dc.get("acceleration", 1.0) * 10)),
+                                lambda v: f"{v * 0.1:.1f}x"),
+                self.slider_row("sl_drag_delay", 0, 350, int(dc.get("dragEndDelay", 150)),
+                                lambda v: f"{v} {T(self.lang, 'ms')}"),
+            ], note="note_drag"),
+            self.section("grp_taps", [
+                self.switch_row("chk_tap", "chk_tap", is_active("four-finger-tap.service", True)),
+            ]),
+        ]))
+
         self.lang_box = QComboBox()
         for code, name in LANGS.items():
             self.lang_box.addItem(name, code)
         self.lang_box.setCurrentIndex(self.lang_box.findData(self.lang))
-        hdr.addLayout(title_box); hdr.addStretch()
-        hdr.addWidget(self.badge, alignment=Qt.AlignmentFlag.AlignVCenter)
-        hdr.addWidget(self.lang_box, alignment=Qt.AlignmentFlag.AlignVCenter)
-        root.addLayout(hdr)
+        lang_row = self.row("lang_label", self.lang_box)
+        self.stack.addWidget(self.page("nav_general", [
+            self.section("grp_interface", [lang_row], note="note_general"),
+        ]))
 
-        # Card 1: Taptic Engine & Force Touch
-        c1, l1 = self.make_card("card_taptic")
-        ct = read_param("touch_tick", 18)
-        self.chk_tick = QCheckBox(); self.L["chk_tick"] = self.chk_tick
-        self.chk_tick.setChecked(ct > 0)
-        l1.addWidget(self.chk_tick)
-        self.st, _ = self.add_slider(l1, "sl_tick_strength", 6, 35, ct if ct > 0 else 18)
-        self.st.setEnabled(ct > 0)
+        # ---- footer ----
+        footer = QFrame(); footer.setObjectName("Footer"); footer.setFixedHeight(62)
+        fl = QHBoxLayout(footer); fl.setContentsMargins(22, 0, 22, 0); fl.setSpacing(10)
+        self.b_bt = QPushButton(); self.b_bt.setObjectName("Secondary"); self.register("btn_bt", self.b_bt)
+        self.b_kde = QPushButton(); self.b_kde.setObjectName("Secondary"); self.register("btn_kde", self.b_kde)
+        self.b_sv = QPushButton(); self.b_sv.setObjectName("Primary"); self.register("btn_save", self.b_sv)
+        fl.addWidget(self.b_bt); fl.addWidget(self.b_kde); fl.addStretch(); fl.addWidget(self.b_sv)
 
-        l1.addWidget(self.divider())
-        self.sp1, _ = self.add_slider(l1, "sl_click_thr", 70, 160, read_param("click1_down", 120))
-        self.sv1, _ = self.add_slider(l1, "sl_click_vib", 15, 63, read_param("click1_vib", 63))
+        right = QVBoxLayout(); right.setContentsMargins(0, 0, 0, 0); right.setSpacing(0)
+        right.addWidget(self.stack, 1); right.addWidget(footer)
 
-        l1.addWidget(self.divider())
-        self.sf, _ = self.add_slider(l1, "sl_force_thr", 150, 245, read_param("force_down", 208))
-        self.svf, _ = self.add_slider(l1, "sl_force_vib", 20, 63, read_param("force_vib", 63))
-        root.addWidget(c1)
+        root = QHBoxLayout(self); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
+        root.addWidget(side); root.addLayout(right, 1)
 
-        # Card 2: Gestures & dragging
-        c2, l2 = self.make_card("card_gestures")
-        self.chk_drag = QCheckBox(); self.L["chk_drag"] = self.chk_drag
-        self.chk_drag.setChecked(is_active("three-finger-drag.service"))
-        l2.addWidget(self.chk_drag)
-
-        try: dc = json.load(open(DRAG_CONF))
-        except Exception: dc = {"acceleration": 1.0, "dragEndDelay": 150}
-        self.sa, _ = self.add_slider(l2, "sl_drag_speed", 5, 25,
-                                     int(round(dc.get("acceleration", 1.0) * 10)),
-                                     lambda v: f"{v * 0.1:.1f}x")
-        self.sd, _ = self.add_slider(l2, "sl_drag_delay", 0, 350,
-                                     int(dc.get("dragEndDelay", 150)),
-                                     lambda v: f"{v} {T(self.lang, 'ms')}")
-
-        l2.addWidget(self.divider())
-        self.chk_tap = QCheckBox(); self.L["chk_tap"] = self.chk_tap
-        self.chk_tap.setChecked(is_active("four-finger-tap.service", True))
-        l2.addWidget(self.chk_tap)
-        root.addWidget(c2)
-
-        # Bottom buttons
-        btns = QHBoxLayout(); btns.setSpacing(10)
-        self.b_bt = QPushButton(); self.b_bt.setObjectName("SecBtn"); self.L["btn_bt"] = self.b_bt
-        self.b_kde = QPushButton(); self.b_kde.setObjectName("SecBtn"); self.L["btn_kde"] = self.b_kde
-        self.b_sv = QPushButton(); self.b_sv.setObjectName("PrimaryBtn"); self.L["btn_save"] = self.b_sv
-        btns.addWidget(self.b_bt); btns.addWidget(self.b_kde); btns.addStretch(); btns.addWidget(self.b_sv)
-        root.addLayout(btns)
-
-        # Live signals (apply immediately)
+        # ---- signals ----
+        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.nav.setCurrentRow(0)
         self.chk_tick.toggled.connect(lambda c: (self.st.setEnabled(c), write_param("touch_tick", self.st.value() if c else 0)))
         self.st.valueChanged.connect(lambda v: write_param("touch_tick", v) if self.chk_tick.isChecked() else None)
         self.sp1.valueChanged.connect(lambda v: write_param("click1_down", v))
@@ -212,35 +310,81 @@ class TrackpadApp(QWidget):
         self.b_kde.clicked.connect(lambda: subprocess.Popen(["kcmshell6", "kcm_touchpad"]))
         self.b_sv.clicked.connect(self.save_all)
         self.lang_box.currentIndexChanged.connect(self.change_language)
+        self.st.setEnabled(self.chk_tick.isChecked())
 
         self.retranslate()
 
-    # ---- helpers -------------------------------------------------------
+    # ---- builders ------------------------------------------------------
 
-    def make_card(self, key):
-        card = QFrame(); card.setObjectName("Card")
-        lay = QVBoxLayout(card); lay.setContentsMargins(16, 14, 16, 14); lay.setSpacing(10)
-        lbl = QLabel(); lbl.setObjectName("CardTitle"); self.L[key] = lbl
-        lay.addWidget(lbl)
-        return card, lay
+    def register(self, key, widget):
+        self.L.setdefault(key, []).append(widget)
 
-    def divider(self):
-        d = QFrame(); d.setObjectName("Divider"); d.setFrameShape(QFrame.Shape.HLine); return d
+    def page(self, title_key, sections):
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.viewport().setAutoFillBackground(False)
+        content = QWidget(); content.setObjectName("Page")
+        lay = QVBoxLayout(content); lay.setContentsMargins(30, 26, 30, 26); lay.setSpacing(20)
+        head = QLabel(); head.setObjectName("PageTitle"); self.register(title_key, head)
+        lay.addWidget(head)
+        for s in sections:
+            lay.addLayout(s)
+        lay.addStretch(1)
+        scroll.setWidget(content)
+        return scroll
 
-    def add_slider(self, parent_lay, key, mn, mx, val, fmt=None):
-        if fmt is None:
-            fmt = lambda v: str(v)
-        row = QHBoxLayout(); row.setSpacing(12)
-        lbl = QLabel(); lbl.setFixedWidth(210); self.L[key] = lbl
+    def section(self, title_key, rows, note=None):
+        box = QVBoxLayout(); box.setSpacing(7)
+        t = QLabel(); t.setObjectName("GroupTitle"); self.register(title_key, t)
+        box.addWidget(t)
+        card = QFrame(); card.setObjectName("Group")
+        cl = QVBoxLayout(card); cl.setContentsMargins(0, 0, 0, 0); cl.setSpacing(0)
+        for i, r in enumerate(rows):
+            if i:
+                wrap = QWidget(); wl = QVBoxLayout(wrap); wl.setContentsMargins(16, 0, 0, 0); wl.setSpacing(0)
+                sep = QFrame(); sep.setObjectName("Sep"); sep.setFixedHeight(1)
+                wl.addWidget(sep); cl.addWidget(wrap)
+            cl.addWidget(r)
+        box.addWidget(card)
+        if note:
+            n = QLabel(); n.setObjectName("Note"); n.setWordWrap(True); self.register(note, n)
+            box.addWidget(n)
+        return box
+
+    def row(self, label_key, control):
+        w = QWidget(); lay = QHBoxLayout(w)
+        lay.setContentsMargins(16, 11, 16, 11); lay.setSpacing(12)
+        lbl = QLabel(); lbl.setWordWrap(True); self.register(label_key, lbl)
+        lay.addWidget(lbl, 1); lay.addWidget(control)
+        return w
+
+    def switch_row(self, label_key, attr, checked):
+        sw = Switch(); sw.setChecked(checked)
+        setattr(self, attr, sw)
+        return self.row(label_key, sw)
+
+    def slider_row(self, label_key, mn, mx, val, fmt=str):
+        w = QWidget(); lay = QHBoxLayout(w)
+        lay.setContentsMargins(16, 11, 16, 11); lay.setSpacing(12)
+        lbl = QLabel(); lbl.setWordWrap(True); self.register(label_key, lbl)
         sld = QSlider(Qt.Orientation.Horizontal); sld.setRange(mn, mx); sld.setValue(val)
-        pill = QLabel(fmt(val)); pill.setObjectName("ValPill"); pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sld.setFixedWidth(190)
+        pill = QLabel(fmt(val)); pill.setObjectName("Value")
+        pill.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         sld.valueChanged.connect(lambda v: pill.setText(fmt(v)))
         self.pills.append((pill, sld, fmt))
-        row.addWidget(lbl); row.addWidget(sld); row.addWidget(pill)
-        parent_lay.addLayout(row)
-        return sld, pill
+        lay.addWidget(lbl, 1); lay.addWidget(sld); lay.addWidget(pill)
+        # expose the slider under the attribute names used by save_all
+        self._bind_slider(label_key, sld)
+        return w
 
-    # ---- language ------------------------------------------------------
+    def _bind_slider(self, label_key, sld):
+        names = {"sl_tick_strength": "st", "sl_click_thr": "sp1", "sl_click_vib": "sv1",
+                 "sl_force_thr": "sf", "sl_force_vib": "svf", "sl_drag_speed": "sa",
+                 "sl_drag_delay": "sd"}
+        setattr(self, names[label_key], sld)
+
+    # ---- language & text -------------------------------------------------
 
     def change_language(self, index):
         self.lang = self.lang_box.itemData(index)
@@ -250,9 +394,12 @@ class TrackpadApp(QWidget):
     def retranslate(self):
         lang = self.lang
         self.setWindowTitle(T(lang, "window_title"))
-        for key, widget in self.L.items():
-            widget.setText(T(lang, key))
-        self.badge.setText(get_battery(lang))
+        for key, widgets in self.L.items():
+            for w in widgets:
+                w.setText(T(lang, key))
+        for item, key in self.nav_items:
+            item.setText(T(lang, key))
+        self.battery.setText(get_battery(lang))
         for pill, sld, fmt in self.pills:
             pill.setText(fmt(sld.value()))
 
