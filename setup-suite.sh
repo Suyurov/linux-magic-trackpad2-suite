@@ -45,7 +45,7 @@ echo "==> 4. Installing GUI Control Center and 4/5-finger tap daemon..."
 mkdir -p "$REAL_HOME/.local/bin" "$REAL_HOME/.local/share/applications" "$REAL_HOME/.config/systemd/user"
 cp suite/gui/magic-trackpad-settings.py "$REAL_HOME/.local/bin/"
 chmod +x "$REAL_HOME/.local/bin/magic-trackpad-settings.py"
-sed "s|/home/suyurov|$REAL_HOME|g" suite/gui/magic-trackpad-settings.desktop > "$REAL_HOME/.local/share/applications/magic-trackpad-settings.desktop"
+sed "s|/home/REPLACE_USER|$REAL_HOME|g" suite/gui/magic-trackpad-settings.desktop > "$REAL_HOME/.local/share/applications/magic-trackpad-settings.desktop"
 
 cp suite/gestures/four-finger-tap.py "$REAL_HOME/.local/bin/"
 chmod +x "$REAL_HOME/.local/bin/four-finger-tap.py"
