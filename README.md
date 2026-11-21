@@ -1,31 +1,20 @@
-# linux-hid-magicmouse
-Add support to change click pressure and haptic feedback for magic trackpad 2
+# Apple Magic Trackpad 2 — Full Force Touch & Gesture Suite for Linux
 
-## DKMS
+Complete macOS-like experience for **Apple Magic Trackpad 2** on Linux (Arch Linux / KDE Plasma 6 Wayland) over **Bluetooth & USB**.
 
-Install with:
+## Features
+- **Custom `hid-magicmouse` DKMS Kernel Driver:**
+  - **2-Stage Force Touch:** Crisp primary click (`BTN_LEFT`) + deep secondary Force Click with stronger Taptic Engine thump and clean word selection (no phantom release clicks).
+  - **Live Touch Haptics (`touch_tick`):** Optional subtle Taptic Engine micro-tick on every finger landing.
+  - **Real-Time Tuning:** Adjust thresholds and vibration strength on the fly via `/sys/module/hid_magicmouse/parameters/*`.
+- **Three-Finger Drag (`linux-3-finger-drag`):** Drag windows and select text with 3 fingers without pressing down, while keeping 4-finger desktop swipes intact.
+- **4 & 5 Finger Taps:** 4-finger tap opens Launchpad / Application Dashboard; 5-finger tap toggles Show Desktop.
+- **GUI Control Center (PyQt6):** Native control panel to tune haptic strength, thresholds, drag speed, and save settings permanently.
 
-    sudo ./scripts/install.sh
-
-Remove with:
-
-    sudo ./scripts/remove.sh
-
-
-## Configuration
-
-By default, it works the same as before. To change click pressure, it need to get into host click mode:
-
-    sudo modprobe -r hid_magicmouse
-    sudo modprobe hid-magicmouse host_click=on button_down_param=0x503f0606 button_up_param=0x35110404
-
-The first byte means the pressure to trigger the button. And three latest bytes means how the trackpad vibrates. Set latest two bytes 0x00 to get silent mode
-
-By default when `host_click=on`, button_down_param=0x40170606 button_up_param=0x26140000, which is the same as medium pressure on macOS
-
-## Thanks
-
-* https://github.com/mwyborski/Linux-Magic-Trackpad-2-Driver
-* https://github.com/ponyfleisch/hid-magictrackpad2
-* https://github.com/dos1/Linux-Magic-Trackpad-2-Driver
-* My friend helps to capture packets on mac
+## One-Command Installation (Arch Linux)
+```bash
+git clone https://github.com<YOUR_USERNAME>/linux-magic-trackpad2-suite.git
+cd linux-magic-trackpad2-suite
+./setup-suite.sh
+```
+*(Log out and back in once after installation so `input` group permissions apply).*

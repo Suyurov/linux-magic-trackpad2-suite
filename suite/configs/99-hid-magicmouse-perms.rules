@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="module", KERNEL=="hid_magicmouse", RUN+="/usr/bin/chmod 0666 /sys/module/hid_magicmouse/parameters/*"

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Magic Trackpad 2 Settings
+Comment=Настройка Force Touch и Taptic Engine
+Exec=/home/suyurov/.local/bin/magic-trackpad-settings.py
+Icon=input-touchpad
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;

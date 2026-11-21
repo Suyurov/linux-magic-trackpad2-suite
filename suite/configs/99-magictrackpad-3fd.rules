@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="Apple Inc. Magic Trackpad 2", ATTRS{phys}!="*proxy*", RUN+="/usr/bin/systemctl restart three-finger-drag.service"
