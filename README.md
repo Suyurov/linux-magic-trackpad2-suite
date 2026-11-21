@@ -13,7 +13,7 @@ Complete macOS-like experience for **Apple Magic Trackpad 2** on Linux (Arch Lin
 
 ## One-Command Installation (Arch Linux)
 ```bash
-git clone https://github.comSuyurov/linux-magic-trackpad2-suite.git
+git clone https://github.com/Suyurov/linux-magic-trackpad2-suite.git
 cd linux-magic-trackpad2-suite
 ./setup-suite.sh
 ```
