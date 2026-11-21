@@ -4,6 +4,9 @@
  *
  *   Copyright (c) 2010 Michael Poole <mdpoole@troilus.org>
  *   Copyright (c) 2010 Chase Douglas <chase.douglas@canonical.com>
+ *
+ *   Modifications (c) 2026 Suyurov: Force Touch thresholds, Taptic Engine
+ *   haptics (touch_tick, click1/force params) and host click tuning.
  */
 
 /*

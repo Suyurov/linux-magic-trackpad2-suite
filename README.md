@@ -18,3 +18,14 @@ cd linux-magic-trackpad2-suite
 ./setup-suite.sh
 ```
 *(Log out and back in once after installation so `input` group permissions apply).*
+
+## Credits
+
+The `hid-magicmouse` driver is based on the following work:
+
+* https://github.com/nexustar/linux-hid-magicmouse
+* https://github.com/mwyborski/Linux-Magic-Trackpad-2-Driver
+* https://github.com/ponyfleisch/hid-magictrackpad2
+* https://github.com/dos1/Linux-Magic-Trackpad-2-Driver
+
+The `hid-magicmouse.c` driver is distributed under GPL-2.0-or-later.
