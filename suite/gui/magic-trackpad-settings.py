@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QComboBox, QAbstractButton, QListWidget, QListWidgetItem,
                              QStackedWidget, QScrollArea)
 from PyQt6.QtCore import Qt, QSettings, QRectF
-from PyQt6.QtGui import QPainter, QColor
+from PyQt6.QtGui import QPainter, QColor, QIcon
 
 PARAM_DIR = "/sys/module/hid_magicmouse/parameters"
 DRAG_CONF = "/etc/linux-3-finger-drag/3fd-config.json"
@@ -130,11 +130,6 @@ QSlider::groove:horizontal { height: 4px; background: $track_off; border-radius:
 QSlider::sub-page:horizontal { background: $accent; border-radius: 2px; }
 QSlider::handle:horizontal { background: #ffffff; border: 1px solid rgba(0, 0, 0, 0.10);
                              width: 18px; height: 18px; margin: -7px 0; border-radius: 9px; }
-QPushButton#Secondary { background: $btn; border: 1px solid $border; border-radius: 15px; padding: 6px 16px; }
-QPushButton#Secondary:hover { background: $btn_hover; }
-QPushButton#Primary { background: $accent; color: #ffffff; border: none; border-radius: 15px;
-                      padding: 6px 20px; font-weight: 600; }
-QPushButton#Primary:hover { background: $accent_hover; }
 QComboBox { background: $pill; border: none; border-radius: 8px; padding: 5px 10px; min-width: 130px; }
 QComboBox::drop-down { border: none; width: 18px; }
 QFrame#Footer { background: $window; border-top: 1px solid $sep; }
@@ -165,6 +160,43 @@ class Switch(QAbstractButton):
         x = r.right() - d - 2 if self.isChecked() else r.left() + 2
         p.setBrush(QColor("#ffffff"))
         p.drawEllipse(QRectF(x, r.top() + 2, d, d))
+        p.end()
+
+
+class PillButton(QPushButton):
+    """Capsule button painted by hand so the rounded corners always show."""
+    theme = LIGHT
+
+    def __init__(self, text="", primary=False, parent=None):
+        super().__init__(text, parent)
+        self.primary = primary
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(30)
+        self.setMinimumWidth(96)
+        self.setAutoFillBackground(False)
+
+    def paintEvent(self, _):
+        t = self.theme
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.4)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        if self.primary:
+            fill = t["accent_hover"] if self.underMouse() else t["accent"]
+            text_color = "#ffffff"
+            border = None
+        else:
+            fill = t["btn_hover"] if self.underMouse() else t["btn"]
+            text_color = t["text"]
+            border = t["border"]
+        p.setPen(QColor(border) if border else Qt.PenStyle.NoPen)
+        p.setBrush(QColor(fill))
+        p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
+        p.setPen(QColor(text_color))
+        f = self.font(); f.setWeight(f.Weight.DemiBold if self.primary else f.Weight.Medium)
+        p.setFont(f)
+        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
         p.end()
 
 
@@ -215,6 +247,7 @@ class TrackpadApp(QWidget):
 
         self.theme = detect_theme(QApplication.instance())
         Switch.theme = self.theme
+        PillButton.theme = self.theme
         self.setObjectName("Root")
         self.setStyleSheet(STYLE.substitute(self.theme))
         self.resize(820, 600)
@@ -284,9 +317,9 @@ class TrackpadApp(QWidget):
         # ---- footer ----
         footer = QFrame(); footer.setObjectName("Footer"); footer.setFixedHeight(62)
         fl = QHBoxLayout(footer); fl.setContentsMargins(22, 0, 22, 0); fl.setSpacing(10)
-        self.b_bt = QPushButton(); self.b_bt.setObjectName("Secondary"); self.register("btn_bt", self.b_bt)
-        self.b_kde = QPushButton(); self.b_kde.setObjectName("Secondary"); self.register("btn_kde", self.b_kde)
-        self.b_sv = QPushButton(); self.b_sv.setObjectName("Primary"); self.register("btn_save", self.b_sv)
+        self.b_bt = PillButton(); self.register("btn_bt", self.b_bt)
+        self.b_kde = PillButton(); self.register("btn_kde", self.b_kde)
+        self.b_sv = PillButton(primary=True); self.register("btn_save", self.b_sv)
         fl.addWidget(self.b_bt); fl.addWidget(self.b_kde); fl.addStretch(); fl.addWidget(self.b_sv)
 
         right = QVBoxLayout(); right.setContentsMargins(0, 0, 0, 0); right.setSpacing(0)
@@ -434,6 +467,9 @@ class TrackpadApp(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # Ties the window to magic-trackpad-settings.desktop so the shell shows our icon.
+    app.setDesktopFileName("magic-trackpad-settings")
+    app.setWindowIcon(QIcon.fromTheme("magic-trackpad-settings"))
     w = TrackpadApp()
     w.show()
     sys.exit(app.exec())
