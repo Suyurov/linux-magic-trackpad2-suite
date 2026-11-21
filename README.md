@@ -11,6 +11,17 @@ Complete macOS-like experience for **Apple Magic Trackpad 2** on Linux (Arch Lin
 - **4 & 5 Finger Taps:** 4-finger tap opens Launchpad / Application Dashboard; 5-finger tap toggles Show Desktop.
 - **GUI Control Center (PyQt6):** Native control panel to tune haptic strength, thresholds, drag speed, and save settings permanently.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/taptic.png" width="49%" alt="Taptic Engine settings">
+  <img src="docs/screenshots/gestures.png" width="49%" alt="Gestures settings">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/general.png" width="49%" alt="General settings and language">
+</p>
+
 ## One-Command Installation (Arch Linux)
 ```bash
 git clone https://github.com/Suyurov/linux-magic-trackpad2-suite.git
