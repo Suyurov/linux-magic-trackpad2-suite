@@ -1,5 +1,5 @@
 [Unit]
-Description=Four-finger tap to Launchpad, five-finger tap to Show Desktop
+Description=Four and five finger taps (configurable actions)
 After=graphical-session.target
 
 [Service]

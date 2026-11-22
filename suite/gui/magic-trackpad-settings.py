@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import sys, glob, json, subprocess, time, shutil
+import sys, os, glob, json, subprocess, time, shutil
 from string import Template
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QPushButton, QFrame, QMessageBox,
                              QComboBox, QAbstractButton, QListWidget, QListWidgetItem,
-                             QStackedWidget, QScrollArea)
+                             QStackedWidget, QScrollArea, QLineEdit)
 from PyQt6.QtCore import Qt, QSettings, QRectF
 from PyQt6.QtGui import QPainter, QColor, QIcon
 
@@ -12,6 +12,12 @@ PARAM_DIR = "/sys/module/hid_magicmouse/parameters"
 DRAG_CONF = "/etc/linux-3-finger-drag/3fd-config.json"
 DEFAULT_LANG = "ru"
 LANGS = {"ru": "Русский", "en": "English"}
+CONF_DIR = os.path.expanduser("~/.config/magic-trackpad-suite")
+GESTURES_FILE = os.path.join(CONF_DIR, "gestures.json")
+ACTION_KEYS = ["launchpad", "show_desktop", "none", "custom"]
+GESTURE_DEFAULTS = {"four": "launchpad", "five": "show_desktop", "force": "click"}
+FORCE_KEYS = ["click", "context", "none", "custom"]
+FORCE_MODE = {"click": 0}   # everything else -> 3: the daemon sends clicks itself
 
 STRINGS = {
     "ru": {
@@ -39,7 +45,23 @@ STRINGS = {
         "chk_drag": "Перетаскивание тремя пальцами",
         "sl_drag_speed": "Скорость",
         "sl_drag_delay": "Задержка отпускания",
-        "chk_tap": "Тап 4 пальцами → Launchpad, 5 → Рабочий стол",
+        "chk_tap": "Тапы 4 и 5 пальцами",
+        "gest_four": "4 пальца",
+        "gest_five": "5 пальцев",
+        "act_launchpad": "Launchpad",
+        "act_show_desktop": "Показать рабочий стол",
+        "act_none": "Ничего",
+        "act_custom": "Своя команда",
+        "cmd_placeholder": "Например: firefox",
+        "note_actions": "Своя команда запускается в оболочке. Сочетания клавиш пока не поддерживаются.",
+        "force_action": "Действие при Force Touch",
+        "act_click": "Обычный клик",
+        "act_middle": "Средняя кнопка",
+        "act_context": "Контекстное меню",
+        "grp_feedback": "Отклик",
+        "row_feedback": "Тактильный сигнал при Force Touch",
+        "row_sound": "Звук при действии",
+        "note_feedback": "Два толчка, если держать палец около 0,25 с после сильного нажатия.",
         "lang_label": "Язык",
         "note_touch": "Короткий тик каждый раз, когда палец касается поверхности.",
         "note_click": "Меньшее усилие означает, что клик срабатывает легче.",
@@ -49,6 +71,7 @@ STRINGS = {
         "btn_bt": "Переподключить BT",
         "btn_kde": "Жесты KDE",
         "btn_save": "Сохранить",
+        "btn_pressure": "Тест давления",
         "done_title": "Готово",
         "done_text": "Службы Bluetooth и трекпада перезапущены.",
         "saved_title": "Сохранено",
@@ -79,7 +102,23 @@ STRINGS = {
         "chk_drag": "Three-finger drag",
         "sl_drag_speed": "Speed",
         "sl_drag_delay": "Release delay",
-        "chk_tap": "4-finger tap → Launchpad, 5 → Show Desktop",
+        "chk_tap": "4 and 5 finger taps",
+        "gest_four": "4 fingers",
+        "gest_five": "5 fingers",
+        "act_launchpad": "Launchpad",
+        "act_show_desktop": "Show Desktop",
+        "act_none": "Nothing",
+        "act_custom": "Custom command",
+        "cmd_placeholder": "e.g. firefox",
+        "note_actions": "A custom command runs in your shell. Key shortcuts are not supported yet.",
+        "force_action": "Force Touch action",
+        "act_click": "Regular click",
+        "act_middle": "Middle click",
+        "act_context": "Context menu",
+        "grp_feedback": "Feedback",
+        "row_feedback": "Haptic signal on Force Touch",
+        "row_sound": "Sound on action",
+        "note_feedback": "Two taps if you hold for about 0.25 s after a firm press.",
         "lang_label": "Language",
         "note_touch": "A short tick each time a finger touches the surface.",
         "note_click": "Lower pressure means the click triggers more easily.",
@@ -89,6 +128,7 @@ STRINGS = {
         "btn_bt": "Reconnect BT",
         "btn_kde": "KDE gestures",
         "btn_save": "Save",
+        "btn_pressure": "Pressure test",
         "done_title": "Done",
         "done_text": "Bluetooth and trackpad services restarted.",
         "saved_title": "Saved",
@@ -133,6 +173,8 @@ QSlider::handle:horizontal { background: #ffffff; border: 1px solid rgba(0, 0, 0
 QComboBox { background: $pill; border: none; border-radius: 8px; padding: 5px 10px; min-width: 130px; }
 QComboBox::drop-down { border: none; width: 18px; }
 QFrame#Footer { background: $window; border-top: 1px solid $sep; }
+QLineEdit { background: $pill; border: none; border-radius: 8px; padding: 5px 8px; color: $text; }
+QLineEdit:disabled { color: $sub; background: transparent; border: 1px dashed $border; }
 """)
 
 
@@ -234,6 +276,14 @@ def is_active(s, u=False):
     return subprocess.run(["systemctl"] + (["--user"] if u else []) + ["is-active", "--quiet", s]).returncode == 0
 
 
+def load_gestures_gui():
+    try:
+        with open(GESTURES_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def detect_theme(app):
     return DARK if app.palette().window().color().lightness() < 128 else LIGHT
 
@@ -256,6 +306,7 @@ class TrackpadApp(QWidget):
         self.L = {}        # key -> list of widgets that show STRINGS[key]
         self.pills = []    # (value label, slider, formatter)
         self.nav_items = []
+        self.action_widgets = {}   # name -> (combo, line edit)
 
         # ---- sidebar ----
         side = QFrame(); side.setObjectName("Sidebar"); side.setFixedWidth(210)
@@ -285,6 +336,7 @@ class TrackpadApp(QWidget):
                 self.slider_row("sl_click_vib", 15, 63, read_param("click1_vib", 63)),
             ], note="note_click"),
             self.section("grp_force", [
+                self.action_row("force_action", "force", keys=FORCE_KEYS, default="click"),
                 self.slider_row("sl_force_thr", 150, 245, read_param("force_down", 208)),
                 self.slider_row("sl_force_vib", 20, 63, read_param("force_vib", 63)),
             ], note="note_force"),
@@ -302,7 +354,12 @@ class TrackpadApp(QWidget):
             ], note="note_drag"),
             self.section("grp_taps", [
                 self.switch_row("chk_tap", "chk_tap", is_active("four-finger-tap.service", True)),
-            ]),
+                self.action_row("gest_four", "four"),
+                self.action_row("gest_five", "five"),
+            ], note="note_actions"),
+            self.section("grp_feedback", [
+                self.switch_row("row_feedback", "sw_feedback", load_gestures_gui().get("feedback", True)),
+            ], note="note_feedback"),
         ]))
 
         self.lang_box = QComboBox()
@@ -320,7 +377,9 @@ class TrackpadApp(QWidget):
         self.b_bt = PillButton(); self.register("btn_bt", self.b_bt)
         self.b_kde = PillButton(); self.register("btn_kde", self.b_kde)
         self.b_sv = PillButton(primary=True); self.register("btn_save", self.b_sv)
-        fl.addWidget(self.b_bt); fl.addWidget(self.b_kde); fl.addStretch(); fl.addWidget(self.b_sv)
+        self.b_press = PillButton(); self.register("btn_pressure", self.b_press)
+        fl.addWidget(self.b_bt); fl.addWidget(self.b_kde); fl.addWidget(self.b_press)
+        fl.addStretch(); fl.addWidget(self.b_sv)
 
         right = QVBoxLayout(); right.setContentsMargins(0, 0, 0, 0); right.setSpacing(0)
         right.addWidget(self.stack, 1); right.addWidget(footer)
@@ -341,6 +400,7 @@ class TrackpadApp(QWidget):
         self.chk_tap.toggled.connect(lambda c: subprocess.run(["systemctl", "--user", "enable" if c else "disable", "--now", "four-finger-tap.service"]))
         self.b_bt.clicked.connect(self.re_bt)
         self.b_kde.clicked.connect(lambda: subprocess.Popen(["kcmshell6", "kcm_touchpad"]))
+        self.b_press.clicked.connect(self.open_pressure_test)
         if shutil.which("kcmshell6") is None:
             self.b_kde.hide()   # KDE settings module not available on this desktop
         self.b_sv.clicked.connect(self.save_all)
@@ -398,6 +458,30 @@ class TrackpadApp(QWidget):
         setattr(self, attr, sw)
         return self.row(label_key, sw)
 
+    def action_row(self, label_key, name, keys=None, default=None):
+        keys = keys or ACTION_KEYS
+        default = default or GESTURE_DEFAULTS[name]
+        w = QWidget(); lay = QHBoxLayout(w)
+        lay.setContentsMargins(16, 11, 16, 11); lay.setSpacing(12)
+        lbl = QLabel(); lbl.setWordWrap(True); self.register(label_key, lbl)
+        combo = QComboBox(); combo.setFixedWidth(190)
+        for k in keys:
+            combo.addItem("", k)
+        edit = QLineEdit(); edit.setFixedWidth(190)
+        lay.addWidget(lbl, 1); lay.addWidget(combo); lay.addWidget(edit)
+
+        current = load_gestures_gui().get(name, default)
+        if current.startswith("custom:"):
+            key, text = "custom", current[len("custom:"):]
+        else:
+            key, text = (current if current in keys else "none"), ""
+        combo.setCurrentIndex(combo.findData(key))
+        edit.setText(text)
+        edit.setEnabled(key == "custom")
+        combo.currentIndexChanged.connect(lambda _i, c=combo, e=edit: e.setEnabled(c.currentData() == "custom"))
+        self.action_widgets[name] = (combo, edit)
+        return w
+
     def slider_row(self, label_key, mn, mx, val, fmt=str):
         w = QWidget(); lay = QHBoxLayout(w)
         lay.setContentsMargins(16, 11, 16, 11); lay.setSpacing(12)
@@ -437,8 +521,16 @@ class TrackpadApp(QWidget):
         self.battery.setText(get_battery(lang))
         for pill, sld, fmt in self.pills:
             pill.setText(fmt(sld.value()))
+        for combo, edit in self.action_widgets.values():
+            for i in range(combo.count()):
+                combo.setItemText(i, T(lang, "act_" + combo.itemData(i)))
+            edit.setPlaceholderText(T(lang, "cmd_placeholder"))
 
     # ---- actions -------------------------------------------------------
+
+    def open_pressure_test(self):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "magic-trackpad-pressure.py")
+        subprocess.Popen([sys.executable, script])
 
     def toggle_drag(self, c):
         subprocess.run(["sudo", "systemctl", "start" if c else "stop", "three-finger-drag.service"])
@@ -457,13 +549,26 @@ class TrackpadApp(QWidget):
         p1, v1 = self.sp1.value(), self.sv1.value()
         fd, fv = self.sf.value(), self.svf.value()
         fu = max(120, fd - 40)
-        mc = f"options hid_magicmouse host_click=on button_down_param=0x783f0b0b button_up_param=0x55250808 click1_down={p1} click1_vib={v1} force_down=0x{fd:02X} force_up=0x{fu:02X} force_vib={fv} touch_tick={tv}\n"
+        fa = FORCE_MODE.get(self.action_widgets["force"][0].currentData(), 3)
+        mc = f"options hid_magicmouse host_click=on button_down_param=0x783f0b0b button_up_param=0x55250808 click1_down={p1} click1_vib={v1} force_down=0x{fd:02X} force_up=0x{fu:02X} force_vib={fv} touch_tick={tv} force_action={fa}\n"
+        write_param("force_action", fa)
         subprocess.run(["sudo", "tee", "/etc/modprobe.d/hid-magicmouse.conf"], input=mc.encode(), stdout=subprocess.DEVNULL)
         dc = json.dumps({"acceleration": round(self.sa.value() * 0.1, 1), "dragEndDelay": self.sd.value()}, indent=2) + "\n"
         subprocess.run(["sudo", "tee", DRAG_CONF], input=dc.encode(), stdout=subprocess.DEVNULL)
         if self.chk_drag.isChecked():
             subprocess.run(["sudo", "systemctl", "restart", "three-finger-drag.service"]); time.sleep(1.2)
         subprocess.run(["systemctl", "--user", "restart", "four-finger-tap.service"])
+        gest = {"feedback": self.sw_feedback.isChecked()}
+        for name, (combo, edit) in self.action_widgets.items():
+            key = combo.currentData()
+            if key == "custom":
+                cmd = edit.text().strip()
+                gest[name] = f"custom:{cmd}" if cmd else "none"
+            else:
+                gest[name] = key
+        os.makedirs(CONF_DIR, exist_ok=True)
+        with open(GESTURES_FILE, "w") as f:
+            json.dump(gest, f, indent=2)
         QMessageBox.information(self, T(self.lang, "saved_title"), T(self.lang, "saved_text"))
 
 

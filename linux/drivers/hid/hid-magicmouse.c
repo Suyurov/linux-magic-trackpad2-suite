@@ -130,6 +130,9 @@ static uint force_up = 168; module_param(force_up, uint, 0644);
 static uint force_vib = 63; module_param(force_vib, uint, 0644);
 static uint touch_tick = 18; module_param(touch_tick, uint, 0644);
 static uint debug_touch = 0; module_param(debug_touch, uint, 0644);
+static uint force_action = 0; module_param(force_action, uint, 0644);
+static void magicmouse_force_emit(struct input_dev *input);
+MODULE_PARM_DESC(force_action, "Force Touch click: 0=click, 1=middle, 2=context menu, 3=none (userspace)");
 static int force_prev = 0, npoints_prev = 0;
 static unsigned long last_frame_jiffies = 0;
 static bool force_fired = false, was_force_touch = false;
@@ -492,6 +495,7 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		else if (clicks_prev==1 && clicks==0 && !was_force_touch) hid_hw_output_report(hdev, msc->vib_up, 15);
 		if (force_prev==0 && force_click==1) { if (msc->force_vib_down) { msc->force_vib_down[3]=(u8)force_vib; msc->force_vib_down[6]=msc->force_vib_down[11]=(u8)(10+force_vib*30/63); } hid_hw_output_report(hdev, msc->force_vib_down?msc->force_vib_down:msc->vib_down, 15); force_fired=true; was_force_touch=true; }
 		else if (force_prev==1 && force_click==0) hid_hw_output_report(hdev, msc->vib_up, 15);
+		if (force_prev==1 && force_click==0) { input_report_key(msc->input, BTN_TRIGGER_HAPPY1, 0); input_sync(msc->input); }
 		if (npoints==0 || (clicks==0 && !force_click)) was_force_touch=false;
 		if (time_after(jiffies, last_frame_jiffies + msecs_to_jiffies(150))) npoints_prev = 0;
 		last_frame_jiffies = jiffies;
@@ -506,6 +510,7 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		else if (clicks_prev==1 && clicks==0 && !was_force_touch) { usb_fill_int_urb(urb,udev,usb_sndintpipe(udev,0x04),msc->vib_up,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(urb,GFP_KERNEL); }
 		if (force_prev==0 && force_click==1) { struct urb *uf=usb_alloc_urb(0,GFP_KERNEL); if (uf) { if (msc->force_vib_down) { msc->force_vib_down[2]=(u8)force_vib; msc->force_vib_down[5]=msc->force_vib_down[10]=(u8)(10+force_vib*30/63); } usb_fill_int_urb(uf,udev,usb_sndintpipe(udev,0x04),msc->force_vib_down?msc->force_vib_down:msc->vib_down,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(uf,GFP_KERNEL); } force_fired=true; was_force_touch=true; }
 		else if (force_prev==1 && force_click==0) { struct urb *ufu=usb_alloc_urb(0,GFP_KERNEL); if (ufu) { usb_fill_int_urb(ufu,udev,usb_sndintpipe(udev,0x04),msc->vib_up,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(ufu,GFP_KERNEL); } }
+		if (force_prev==1 && force_click==0) { input_report_key(msc->input, BTN_TRIGGER_HAPPY1, 0); input_sync(msc->input); }
 		if (npoints==0 || (clicks==0 && !force_click)) was_force_touch=false;
 		if (time_after(jiffies, last_frame_jiffies + msecs_to_jiffies(150))) npoints_prev = 0;
 		last_frame_jiffies = jiffies;
@@ -551,9 +556,9 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		input_report_rel(input, REL_Y, y);
 	} else if (input->id.product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2) {
 		input_mt_sync_frame(input);
-		if (force_fired) { force_fired=false; input_report_key(input,BTN_MOUSE,0); input_sync(input); input_report_key(input,BTN_MOUSE,1); input_sync(input); input_report_key(input,BTN_MOUSE,0); } else if (!was_force_touch && !force_prev) { input_report_key(input,BTN_MOUSE,clicks & 1); }
+		if (force_fired) { force_fired=false; magicmouse_force_emit(input); } else if (!was_force_touch && !force_prev) { input_report_key(input,BTN_MOUSE,clicks & 1); }
 	} else { /* USB_DEVICE_ID_APPLE_MAGICTRACKPAD */
-		if (force_fired) { force_fired=false; input_report_key(input,BTN_MOUSE,0); input_sync(input); input_report_key(input,BTN_MOUSE,1); input_sync(input); input_report_key(input,BTN_MOUSE,0); } else if (!was_force_touch && !force_prev) { input_report_key(input,BTN_MOUSE,clicks & 1); }
+		if (force_fired) { force_fired=false; magicmouse_force_emit(input); } else if (!was_force_touch && !force_prev) { input_report_key(input,BTN_MOUSE,clicks & 1); }
 		input_mt_report_pointer_emulation(input, true);
 	}
 
@@ -577,6 +582,29 @@ static int magicmouse_event(struct hid_device *hdev, struct hid_field *field,
 		return 1;
 	}
 	return 0;
+}
+
+static void magicmouse_force_emit(struct input_dev *input)
+{
+	switch (force_action) {
+	case 0:
+		input_report_key(input, BTN_MOUSE, 0); input_sync(input);
+		input_report_key(input, BTN_MOUSE, 1); input_sync(input);
+		input_report_key(input, BTN_MOUSE, 0); input_sync(input);
+		break;
+	case 1:
+		input_report_key(input, BTN_MIDDLE, 1); input_sync(input);
+		input_report_key(input, BTN_MIDDLE, 0); input_sync(input);
+		break;
+	case 2:
+		input_report_key(input, BTN_RIGHT, 1); input_sync(input);
+		input_report_key(input, BTN_RIGHT, 0); input_sync(input);
+		break;
+	default:
+		break;
+	}
+	/* Userspace (gesture daemon): held while Force Touch is held, released in raw_event */
+	input_report_key(input, BTN_TRIGGER_HAPPY1, 1); input_sync(input);
 }
 
 static int magicmouse_setup_input(struct input_dev *input, struct hid_device *hdev)
@@ -611,6 +639,9 @@ static int magicmouse_setup_input(struct input_dev *input, struct hid_device *hd
 		__clear_bit(BTN_RIGHT, input->keybit);
 		__clear_bit(BTN_MIDDLE, input->keybit);
 		__set_bit(BTN_MOUSE, input->keybit);
+		__set_bit(BTN_MIDDLE, input->keybit);
+		__set_bit(BTN_RIGHT, input->keybit);
+		__set_bit(BTN_TRIGGER_HAPPY1, input->keybit);
 		__set_bit(INPUT_PROP_BUTTONPAD, input->propbit);
 		__set_bit(BTN_TOOL_FINGER, input->keybit);
 
@@ -862,6 +893,34 @@ static void magicmouse_enable_mt_work(struct work_struct *work)
 		hid_err(msc->hdev, "unable to request touch data (%d)\n", ret);
 }
 
+static struct hid_device *pulse_hdev;
+
+static int magicmouse_pulse_set(const char *val, const struct kernel_param *kp)
+{
+	unsigned int strength;
+	struct magicmouse_sc *msc;
+	int ret = kstrtouint(val, 0, &strength);
+
+	if (ret)
+		return ret;
+	if (strength == 0 || strength > 63)
+		return -EINVAL;
+	if (!pulse_hdev || pulse_hdev->vendor != BT_VENDOR_ID_APPLE)
+		return -ENODEV;
+	msc = hid_get_drvdata(pulse_hdev);
+	if (!msc || !msc->touch_vib)
+		return -ENODEV;
+	msc->touch_vib[3] = (u8)strength;
+	hid_hw_output_report(pulse_hdev, msc->touch_vib, 15);
+	return 0;
+}
+
+static const struct kernel_param_ops magicmouse_pulse_ops = {
+	.set = magicmouse_pulse_set,
+};
+module_param_cb(pulse, &magicmouse_pulse_ops, NULL, 0200);
+MODULE_PARM_DESC(pulse, "Write 1-63 to fire one short haptic pulse (Bluetooth)");
+
 static int magicmouse_probe(struct hid_device *hdev,
 	const struct hid_device_id *id)
 {
@@ -886,6 +945,7 @@ static int magicmouse_probe(struct hid_device *hdev,
 
 	msc->quirks = id->driver_data;
 	hid_set_drvdata(hdev, msc);
+	pulse_hdev = hdev;
 
 	ret = hid_parse(hdev);
 	if (ret) {
@@ -961,6 +1021,8 @@ err_stop_hw:
 
 static void magicmouse_remove(struct hid_device *hdev)
 {
+	if (pulse_hdev == hdev)
+		pulse_hdev = NULL;
 	struct magicmouse_sc *msc = hid_get_drvdata(hdev);
 
 	if (msc) {
