@@ -24,12 +24,13 @@ app with a pressure test window. Works over **Bluetooth** (USB is supported by t
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/taptic.png" width="49%" alt="Taptic Engine settings">
-  <img src="docs/screenshots/gestures.png" width="49%" alt="Gestures settings">
+  <img src="docs/screenshots/01-taptic.png" width="49%" alt="Taptic Engine settings">
+  <img src="docs/screenshots/02-gestures.png" width="49%" alt="Gestures settings">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/general.png" width="49%" alt="General settings and language">
+  <img src="docs/screenshots/03-general.png" width="49%" alt="General settings and language">
+  <img src="docs/screenshots/04-pressure-test.png" width="49%" alt="Pressure test window">
 </p>
 
 ## Installation (Arch Linux)
