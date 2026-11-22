@@ -70,6 +70,7 @@ fi
 
 echo "==> 3. Removing system config..."
 run sudo rm -f /etc/sudoers.d/magic-trackpad-gui
+run sudo rm -f /etc/sudoers.d/magic-trackpad-pulse
 run sudo rm -f /etc/udev/rules.d/99-magictrackpad-3fd.rules
 run sudo rm -f /etc/udev/rules.d/99-hid-magicmouse-perms.rules
 run sudo rm -f /etc/modprobe.d/hid-magicmouse.conf

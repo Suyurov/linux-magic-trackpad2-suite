@@ -55,6 +55,10 @@ def haptic_pulse(strength):
     try:
         with open(PULSE_PARAM, "w") as f:
             f.write(str(strength))
+    except PermissionError:
+        # the parameter is root-owned after boot: write it through the narrow sudoers rule
+        subprocess.run(["sudo", "-n", "tee", PULSE_PARAM], input=f"{strength}\n".encode(),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Pressure test: a soft circle grows with the press, and a Force Touch changes its colour."""
-import sys, os, time, threading, math, json
+import sys, os, time, threading, math, json, subprocess
 import evdev
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
 from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
@@ -60,6 +60,9 @@ def haptic_pulse(strength):
     try:
         with open(PULSE_PARAM, "w") as f:
             f.write(str(strength))
+    except PermissionError:
+        subprocess.run(["sudo", "-n", "tee", PULSE_PARAM], input=f"{strength}\n".encode(),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
