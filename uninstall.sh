@@ -60,6 +60,7 @@ run systemctl --user daemon-reload
 echo "==> 2. Removing user files..."
 run rm -f "$REAL_HOME/.local/bin/magic-trackpad-settings.py"
 run rm -f "$REAL_HOME/.local/bin/four-finger-tap.py"
+run rm -f "$REAL_HOME/.local/bin/magic-trackpad-pressure.py"
 run rm -f "$REAL_HOME/.local/share/applications/magic-trackpad-settings.desktop"
 run rm -f "$REAL_HOME/.local/share/icons/hicolor/scalable/apps/magic-trackpad-settings.svg"
 run rm -f "$REAL_HOME/.config/systemd/user/four-finger-tap.service"
