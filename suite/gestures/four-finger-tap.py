@@ -47,7 +47,7 @@ def load_settings():
         "strength": int(data.get("feedback_strength", 45)),
         "force_strength": int(force_strength),
         "hold_ms": int(data.get("force_hold_ms", 225)),
-        "gap_ms": int(data.get("force_tap_gap_ms", 150)),
+        "gap_ms": int(data.get("force_tap_gap_ms", 100)),
         "gesture_gap_ms": int(data.get("gesture_tap_gap_ms", 45)),
     }
 

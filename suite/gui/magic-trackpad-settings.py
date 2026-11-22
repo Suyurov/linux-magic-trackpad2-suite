@@ -5,8 +5,8 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QPushButton, QFrame, QMessageBox,
                              QComboBox, QAbstractButton, QListWidget, QListWidgetItem,
                              QStackedWidget, QScrollArea, QLineEdit)
-from PyQt6.QtCore import Qt, QSettings, QRectF
-from PyQt6.QtGui import QPainter, QColor, QIcon
+from PyQt6.QtCore import Qt, QSettings, QRectF, QPointF, QTimer, QThread, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QIcon, QPen, QPainterPath
 
 PARAM_DIR = "/sys/module/hid_magicmouse/parameters"
 DRAG_CONF = "/etc/linux-3-finger-drag/3fd-config.json"
@@ -54,6 +54,10 @@ STRINGS = {
         "act_custom": "Своя команда",
         "cmd_placeholder": "Например: firefox",
         "note_actions": "Своя команда запускается в оболочке. Сочетания клавиш пока не поддерживаются.",
+        "force_gap": "Интервал двух толчков",
+        "gap_short": "Короткий (100 мс)",
+        "gap_medium": "Средний (150 мс)",
+        "gap_long": "Длинный (195 мс)",
         "force_action": "Действие при Force Touch",
         "act_click": "Обычный клик",
         "act_middle": "Средняя кнопка",
@@ -111,6 +115,10 @@ STRINGS = {
         "act_custom": "Custom command",
         "cmd_placeholder": "e.g. firefox",
         "note_actions": "A custom command runs in your shell. Key shortcuts are not supported yet.",
+        "force_gap": "Double-tap interval",
+        "gap_short": "Short (100 ms)",
+        "gap_medium": "Medium (150 ms)",
+        "gap_long": "Long (195 ms)",
         "force_action": "Force Touch action",
         "act_click": "Regular click",
         "act_middle": "Middle click",
@@ -288,6 +296,77 @@ def detect_theme(app):
     return DARK if app.palette().window().color().lightness() < 128 else LIGHT
 
 
+class Task(QThread):
+    """Runs the slow part of an action off the UI thread."""
+    done = pyqtSignal()
+
+    def __init__(self, fn, parent=None):
+        super().__init__(parent)
+        self.fn = fn
+
+    def run(self):
+        try:
+            self.fn()
+        finally:
+            self.done.emit()
+
+class SaveIndicator(QWidget):
+    """Open ring that spins while saving; then the ring closes and a check mark appears."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(26, 26)
+        self.mode = "idle"        # idle | loading | done
+        self.angle = 0.0
+        self.sweep = 270.0
+        self.check = 0.0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.tick)
+
+    def start(self):
+        self.mode = "loading"
+        self.sweep = 270.0
+        self.check = 0.0
+        self.setVisible(True)
+        self.timer.start(16)
+
+    def finish(self):
+        self.mode = "done"
+
+    def tick(self):
+        self.angle = (self.angle + 7) % 360
+        if self.mode == "done":
+            self.sweep += (360.0 - self.sweep) * 0.18
+            self.check += (1.0 - self.check) * 0.14
+            if self.check > 0.995 and self.sweep > 359.5:
+                self.sweep, self.check = 360.0, 1.0
+                self.timer.stop()
+        self.update()
+
+    def paintEvent(self, _):
+        accent = QColor(Switch.theme["accent"])
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(3, 3, self.width() - 6, self.height() - 6)
+        pen = QPen(accent, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        if self.mode == "loading":
+            p.drawArc(rect, int(-self.angle * 16), int(-self.sweep * 16))
+        elif self.mode == "done":
+            p.drawArc(rect, 90 * 16, int(-self.sweep * 16))
+            # check mark, drawn progressively
+            c = self.width() / 2
+            pts = [QPointF(c * 0.62, c * 1.02), QPointF(c * 0.92, c * 1.30), QPointF(c * 1.42, c * 0.78)]
+            seg1 = min(1.0, self.check * 2)
+            seg2 = max(0.0, (self.check - 0.5) * 2)
+            path = QPainterPath(pts[0])
+            if seg1 > 0:
+                path.lineTo(pts[0] + (pts[1] - pts[0]) * seg1)
+            if seg2 > 0:
+                path.moveTo(pts[1])
+                path.lineTo(pts[1] + (pts[2] - pts[1]) * seg2)
+            p.drawPath(path)
+        p.end()
+
 class TrackpadApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -379,7 +458,8 @@ class TrackpadApp(QWidget):
         self.b_sv = PillButton(primary=True); self.register("btn_save", self.b_sv)
         self.b_press = PillButton(); self.register("btn_pressure", self.b_press)
         fl.addWidget(self.b_bt); fl.addWidget(self.b_kde); fl.addWidget(self.b_press)
-        fl.addStretch(); fl.addWidget(self.b_sv)
+        fl.addStretch(); self.indicator = SaveIndicator(); self.indicator.setVisible(False)
+        fl.addWidget(self.indicator); fl.addWidget(self.b_sv)
 
         right = QVBoxLayout(); right.setContentsMargins(0, 0, 0, 0); right.setSpacing(0)
         right.addWidget(self.stack, 1); right.addWidget(footer)
@@ -537,12 +617,22 @@ class TrackpadApp(QWidget):
         time.sleep(1.2)
         subprocess.run(["systemctl", "--user", "restart", "four-finger-tap.service"])
 
+    def run_task(self, fn):
+        if getattr(self, "task", None) and self.task.isRunning():
+            return
+        self.indicator.start()
+        self.task = Task(fn, self)
+        self.task.done.connect(self.indicator.finish)
+        self.task.start()
+
     def re_bt(self):
-        subprocess.run(["sudo", "systemctl", "restart", "bluetooth"]); time.sleep(2)
-        if self.chk_drag.isChecked():
-            subprocess.run(["sudo", "systemctl", "restart", "three-finger-drag.service"]); time.sleep(1.2)
-        subprocess.run(["systemctl", "--user", "restart", "four-finger-tap.service"])
-        QMessageBox.information(self, T(self.lang, "done_title"), T(self.lang, "done_text"))
+        drag_on = self.chk_drag.isChecked()
+        def work():
+            subprocess.run(["sudo", "systemctl", "restart", "bluetooth"]); time.sleep(2)
+            if drag_on:
+                subprocess.run(["sudo", "systemctl", "restart", "three-finger-drag.service"]); time.sleep(1.2)
+            subprocess.run(["systemctl", "--user", "restart", "four-finger-tap.service"])
+        self.run_task(work)
 
     def save_all(self):
         tv = self.st.value() if self.chk_tick.isChecked() else 0
@@ -551,14 +641,12 @@ class TrackpadApp(QWidget):
         fu = max(120, fd - 40)
         fa = FORCE_MODE.get(self.action_widgets["force"][0].currentData(), 3)
         mc = f"options hid_magicmouse host_click=on button_down_param=0x783f0b0b button_up_param=0x55250808 click1_down={p1} click1_vib={v1} force_down=0x{fd:02X} force_up=0x{fu:02X} force_vib={fv} touch_tick={tv} force_action={fa}\n"
-        write_param("force_action", fa)
-        subprocess.run(["sudo", "tee", "/etc/modprobe.d/hid-magicmouse.conf"], input=mc.encode(), stdout=subprocess.DEVNULL)
         dc = json.dumps({"acceleration": round(self.sa.value() * 0.1, 1), "dragEndDelay": self.sd.value()}, indent=2) + "\n"
-        subprocess.run(["sudo", "tee", DRAG_CONF], input=dc.encode(), stdout=subprocess.DEVNULL)
-        if self.chk_drag.isChecked():
-            subprocess.run(["sudo", "systemctl", "restart", "three-finger-drag.service"]); time.sleep(1.2)
-        subprocess.run(["systemctl", "--user", "restart", "four-finger-tap.service"])
-        gest = {"feedback": self.sw_feedback.isChecked()}
+        drag_on = self.chk_drag.isChecked()
+
+        gest = load_gestures_gui()             # keep keys the GUI does not show
+        gest["feedback"] = self.sw_feedback.isChecked()
+        gest.pop("force_tap_gap_ms", None)     # the tap interval is fixed at 100 ms
         for name, (combo, edit) in self.action_widgets.items():
             key = combo.currentData()
             if key == "custom":
@@ -566,11 +654,18 @@ class TrackpadApp(QWidget):
                 gest[name] = f"custom:{cmd}" if cmd else "none"
             else:
                 gest[name] = key
-        os.makedirs(CONF_DIR, exist_ok=True)
-        with open(GESTURES_FILE, "w") as f:
-            json.dump(gest, f, indent=2)
-        QMessageBox.information(self, T(self.lang, "saved_title"), T(self.lang, "saved_text"))
 
+        def work():
+            write_param("force_action", fa)
+            subprocess.run(["sudo", "tee", "/etc/modprobe.d/hid-magicmouse.conf"], input=mc.encode(), stdout=subprocess.DEVNULL)
+            subprocess.run(["sudo", "tee", DRAG_CONF], input=dc.encode(), stdout=subprocess.DEVNULL)
+            if drag_on:
+                subprocess.run(["sudo", "systemctl", "restart", "three-finger-drag.service"]); time.sleep(1.2)
+            subprocess.run(["systemctl", "--user", "restart", "four-finger-tap.service"])
+            os.makedirs(CONF_DIR, exist_ok=True)
+            with open(GESTURES_FILE, "w") as f:
+                json.dump(gest, f, indent=2)
+        self.run_task(work)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
