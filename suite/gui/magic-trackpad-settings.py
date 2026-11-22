@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, glob, json, subprocess, time, shutil
+import sys, os, glob, json, subprocess, time, shutil, threading
 from string import Template
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QPushButton, QFrame, QMessageBox,
@@ -63,6 +63,8 @@ STRINGS = {
         "act_middle": "Средняя кнопка",
         "act_context": "Контекстное меню",
         "grp_feedback": "Отклик",
+        "sl_force_fb": "Сила двойного отклика Force Touch",
+        "sl_full_fb": "Сила тройного отклика при 100%",
         "row_feedback": "Тактильный сигнал при Force Touch",
         "row_sound": "Звук при действии",
         "note_feedback": "Два толчка, если держать палец около 0,25 с после сильного нажатия.",
@@ -76,6 +78,7 @@ STRINGS = {
         "btn_kde": "Жесты KDE",
         "btn_save": "Сохранить",
         "btn_pressure": "Тест давления",
+        "sl_release_vib": "Сила отпускания клика",
         "done_title": "Готово",
         "done_text": "Службы Bluetooth и трекпада перезапущены.",
         "saved_title": "Сохранено",
@@ -124,6 +127,8 @@ STRINGS = {
         "act_middle": "Middle click",
         "act_context": "Context menu",
         "grp_feedback": "Feedback",
+        "sl_force_fb": "Force Touch double-tap strength",
+        "sl_full_fb": "Strength of the triple tap at 100%",
         "row_feedback": "Haptic signal on Force Touch",
         "row_sound": "Sound on action",
         "note_feedback": "Two taps if you hold for about 0.25 s after a firm press.",
@@ -137,6 +142,7 @@ STRINGS = {
         "btn_kde": "KDE gestures",
         "btn_save": "Save",
         "btn_pressure": "Pressure test",
+        "sl_release_vib": "Click release strength",
         "done_title": "Done",
         "done_text": "Bluetooth and trackpad services restarted.",
         "saved_title": "Saved",
@@ -413,6 +419,7 @@ class TrackpadApp(QWidget):
             self.section("grp_click", [
                 self.slider_row("sl_click_thr", 70, 160, read_param("click1_down", 120)),
                 self.slider_row("sl_click_vib", 15, 63, read_param("click1_vib", 63)),
+                self.slider_row("sl_release_vib", 0, 63, read_param("release_vib", 20)),
             ], note="note_click"),
             self.section("grp_force", [
                 self.action_row("force_action", "force", keys=FORCE_KEYS, default="click"),
@@ -438,6 +445,12 @@ class TrackpadApp(QWidget):
             ], note="note_actions"),
             self.section("grp_feedback", [
                 self.switch_row("row_feedback", "sw_feedback", load_gestures_gui().get("feedback", True)),
+                self.slider_row("sl_force_fb", 1, 63,
+                                int(load_gestures_gui().get("force_feedback_strength",
+                                                            max(1, int(read_param("force_vib", 50) * 0.75)))),
+                                ),
+                self.slider_row("sl_full_fb", 1, 63,
+                                int(load_gestures_gui().get("max_feedback_strength", 60))),
             ], note="note_feedback"),
         ]))
 
@@ -476,6 +489,7 @@ class TrackpadApp(QWidget):
         self.sv1.valueChanged.connect(lambda v: write_param("click1_vib", v))
         self.sf.valueChanged.connect(lambda v: (write_param("force_down", v), write_param("force_up", max(120, v - 40))))
         self.svf.valueChanged.connect(lambda v: write_param("force_vib", v))
+        self.srel.valueChanged.connect(lambda v: write_param("release_vib", v))
         self.chk_drag.toggled.connect(self.toggle_drag)
         self.chk_tap.toggled.connect(lambda c: subprocess.run(["systemctl", "--user", "enable" if c else "disable", "--now", "four-finger-tap.service"]))
         self.b_bt.clicked.connect(self.re_bt)
@@ -580,7 +594,8 @@ class TrackpadApp(QWidget):
     def _bind_slider(self, label_key, sld):
         names = {"sl_tick_strength": "st", "sl_click_thr": "sp1", "sl_click_vib": "sv1",
                  "sl_force_thr": "sf", "sl_force_vib": "svf", "sl_drag_speed": "sa",
-                 "sl_drag_delay": "sd"}
+                 "sl_drag_delay": "sd", "sl_force_fb": "sff", "sl_full_fb": "sfull",
+                 "sl_release_vib": "srel"}
         setattr(self, names[label_key], sld)
 
     # ---- language & text -------------------------------------------------
@@ -640,12 +655,15 @@ class TrackpadApp(QWidget):
         fd, fv = self.sf.value(), self.svf.value()
         fu = max(120, fd - 40)
         fa = FORCE_MODE.get(self.action_widgets["force"][0].currentData(), 3)
-        mc = f"options hid_magicmouse host_click=on button_down_param=0x783f0b0b button_up_param=0x55250808 click1_down={p1} click1_vib={v1} force_down=0x{fd:02X} force_up=0x{fu:02X} force_vib={fv} touch_tick={tv} force_action={fa}\n"
+        rel = self.srel.value()
+        mc = f"options hid_magicmouse host_click=on button_down_param=0x783f0b0b button_up_param=0x55250808 click1_down={p1} click1_vib={v1} force_down=0x{fd:02X} force_up=0x{fu:02X} force_vib={fv} touch_tick={tv} force_action={fa} release_vib={rel}\n"
         dc = json.dumps({"acceleration": round(self.sa.value() * 0.1, 1), "dragEndDelay": self.sd.value()}, indent=2) + "\n"
         drag_on = self.chk_drag.isChecked()
 
         gest = load_gestures_gui()             # keep keys the GUI does not show
         gest["feedback"] = self.sw_feedback.isChecked()
+        gest["force_feedback_strength"] = self.sff.value()
+        gest["max_feedback_strength"] = self.sfull.value()
         gest.pop("force_tap_gap_ms", None)     # the tap interval is fixed at 100 ms
         for name, (combo, edit) in self.action_widgets.items():
             key = combo.currentData()
@@ -657,6 +675,7 @@ class TrackpadApp(QWidget):
 
         def work():
             write_param("force_action", fa)
+            write_param("release_vib", rel)
             subprocess.run(["sudo", "tee", "/etc/modprobe.d/hid-magicmouse.conf"], input=mc.encode(), stdout=subprocess.DEVNULL)
             subprocess.run(["sudo", "tee", DRAG_CONF], input=dc.encode(), stdout=subprocess.DEVNULL)
             if drag_on:

@@ -131,6 +131,8 @@ static uint force_vib = 63; module_param(force_vib, uint, 0644);
 static uint touch_tick = 18; module_param(touch_tick, uint, 0644);
 static uint debug_touch = 0; module_param(debug_touch, uint, 0644);
 static uint force_action = 0; module_param(force_action, uint, 0644);
+static uint release_vib = 20; module_param(release_vib, uint, 0644);
+MODULE_PARM_DESC(release_vib, "Strength of the release pulse (0-63)");
 static void magicmouse_force_emit(struct input_dev *input);
 MODULE_PARM_DESC(force_action, "Force Touch click: 0=click, 1=middle, 2=context menu, 3=none (userspace)");
 static int force_prev = 0, npoints_prev = 0;
@@ -492,9 +494,9 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		clicks = 0; u8 c1_up = click1_down > 35 ? click1_down - 35 : 40;
 		for (ii = 0; ii < npoints; ii++) { u8 pr = data[size - 2 - 9 * ii]; if ((clicks_prev==0 && pr>=click1_down)||(clicks_prev==1 && pr>=c1_up)) clicks=1; if ((force_prev==0 && pr>=force_down)||(force_prev==1 && pr>=force_up)) force_click=1; }
 		if (clicks_prev==0 && clicks==1 && !was_force_touch) { if (msc->vib_down) { msc->vib_down[3]=(u8)click1_vib; msc->vib_down[6]=msc->vib_down[11]=(u8)(6+click1_vib*10/63); } hid_hw_output_report(hdev, msc->vib_down, 15); }
-		else if (clicks_prev==1 && clicks==0 && !was_force_touch) hid_hw_output_report(hdev, msc->vib_up, 15);
+		else if (clicks_prev==1 && clicks==0 && !was_force_touch) { msc->vib_up[3]=(u8)release_vib; hid_hw_output_report(hdev, msc->vib_up, 15); }
 		if (force_prev==0 && force_click==1) { if (msc->force_vib_down) { msc->force_vib_down[3]=(u8)force_vib; msc->force_vib_down[6]=msc->force_vib_down[11]=(u8)(10+force_vib*30/63); } hid_hw_output_report(hdev, msc->force_vib_down?msc->force_vib_down:msc->vib_down, 15); force_fired=true; was_force_touch=true; }
-		else if (force_prev==1 && force_click==0) hid_hw_output_report(hdev, msc->vib_up, 15);
+		else if (force_prev==1 && force_click==0) { msc->vib_up[3]=(u8)release_vib; hid_hw_output_report(hdev, msc->vib_up, 15); }
 		if (force_prev==1 && force_click==0) { input_report_key(msc->input, BTN_TRIGGER_HAPPY1, 0); input_sync(msc->input); }
 		if (npoints==0 || (clicks==0 && !force_click)) was_force_touch=false;
 		if (time_after(jiffies, last_frame_jiffies + msecs_to_jiffies(150))) npoints_prev = 0;
@@ -507,9 +509,9 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		for (ii = 0; ii < npoints; ii++) { u8 pr = data[size - 2 - 9 * ii]; if ((clicks_prev==0 && pr>=click1_down)||(clicks_prev==1 && pr>=c1_up)) clicks=1; if ((force_prev==0 && pr>=force_down)||(force_prev==1 && pr>=force_up)) force_click=1; }
 		udev = hid_to_usb_dev(hdev); urb = usb_alloc_urb(0, GFP_KERNEL);
 		if (clicks_prev==0 && clicks==1 && !was_force_touch) { if (msc->vib_down) { msc->vib_down[2]=(u8)click1_vib; msc->vib_down[5]=msc->vib_down[10]=(u8)(6+click1_vib*10/63); } usb_fill_int_urb(urb,udev,usb_sndintpipe(udev,0x04),msc->vib_down,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(urb,GFP_KERNEL); }
-		else if (clicks_prev==1 && clicks==0 && !was_force_touch) { usb_fill_int_urb(urb,udev,usb_sndintpipe(udev,0x04),msc->vib_up,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(urb,GFP_KERNEL); }
+		else if (clicks_prev==1 && clicks==0 && !was_force_touch) { msc->vib_up[2]=(u8)release_vib; usb_fill_int_urb(urb,udev,usb_sndintpipe(udev,0x04),msc->vib_up,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(urb,GFP_KERNEL); }
 		if (force_prev==0 && force_click==1) { struct urb *uf=usb_alloc_urb(0,GFP_KERNEL); if (uf) { if (msc->force_vib_down) { msc->force_vib_down[2]=(u8)force_vib; msc->force_vib_down[5]=msc->force_vib_down[10]=(u8)(10+force_vib*30/63); } usb_fill_int_urb(uf,udev,usb_sndintpipe(udev,0x04),msc->force_vib_down?msc->force_vib_down:msc->vib_down,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(uf,GFP_KERNEL); } force_fired=true; was_force_touch=true; }
-		else if (force_prev==1 && force_click==0) { struct urb *ufu=usb_alloc_urb(0,GFP_KERNEL); if (ufu) { usb_fill_int_urb(ufu,udev,usb_sndintpipe(udev,0x04),msc->vib_up,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(ufu,GFP_KERNEL); } }
+		else if (force_prev==1 && force_click==0) { struct urb *ufu=usb_alloc_urb(0,GFP_KERNEL); if (ufu) { msc->vib_up[2]=(u8)release_vib; usb_fill_int_urb(ufu,udev,usb_sndintpipe(udev,0x04),msc->vib_up,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(ufu,GFP_KERNEL); } }
 		if (force_prev==1 && force_click==0) { input_report_key(msc->input, BTN_TRIGGER_HAPPY1, 0); input_sync(msc->input); }
 		if (npoints==0 || (clicks==0 && !force_click)) was_force_touch=false;
 		if (time_after(jiffies, last_frame_jiffies + msecs_to_jiffies(150))) npoints_prev = 0;
