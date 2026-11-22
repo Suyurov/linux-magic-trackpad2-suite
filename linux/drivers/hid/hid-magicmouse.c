@@ -918,7 +918,7 @@ static int magicmouse_pulse_set(const char *val, const struct kernel_param *kp)
 static const struct kernel_param_ops magicmouse_pulse_ops = {
 	.set = magicmouse_pulse_set,
 };
-module_param_cb(pulse, &magicmouse_pulse_ops, NULL, 0200);
+module_param_cb(pulse, &magicmouse_pulse_ops, NULL, 0666);
 MODULE_PARM_DESC(pulse, "Write 1-63 to fire one short haptic pulse (Bluetooth)");
 
 static int magicmouse_probe(struct hid_device *hdev,
