@@ -30,6 +30,19 @@ cd linux-magic-trackpad2-suite
 ```
 *(Log out and back in once after installation so `input` group permissions apply).*
 
+## Supported systems
+
+* Arch Linux with KDE Plasma 6 (Wayland), kernel 7.3.5: tested
+* Debian/Ubuntu, Fedora, openSUSE: installer included, not tested yet
+* Other desktops: the driver should work, but 4/5-finger taps and the KDE settings button are KDE-only
+
+## Uninstall
+
+```bash
+./uninstall.sh          # removes the suite and restores the stock driver
+./uninstall.sh --purge  # also removes your saved settings
+```
+
 ## Credits
 
 The `hid-magicmouse` driver is based on the following work:
