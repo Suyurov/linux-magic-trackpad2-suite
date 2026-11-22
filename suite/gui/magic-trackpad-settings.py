@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, glob, json, subprocess, time
+import sys, glob, json, subprocess, time, shutil
 from string import Template
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QPushButton, QFrame, QMessageBox,
@@ -341,6 +341,8 @@ class TrackpadApp(QWidget):
         self.chk_tap.toggled.connect(lambda c: subprocess.run(["systemctl", "--user", "enable" if c else "disable", "--now", "four-finger-tap.service"]))
         self.b_bt.clicked.connect(self.re_bt)
         self.b_kde.clicked.connect(lambda: subprocess.Popen(["kcmshell6", "kcm_touchpad"]))
+        if shutil.which("kcmshell6") is None:
+            self.b_kde.hide()   # KDE settings module not available on this desktop
         self.b_sv.clicked.connect(self.save_all)
         self.lang_box.currentIndexChanged.connect(self.change_language)
         self.st.setEnabled(self.chk_tick.isChecked())
