@@ -129,7 +129,9 @@ static uint force_down = 208; module_param(force_down, uint, 0644);
 static uint force_up = 168; module_param(force_up, uint, 0644);
 static uint force_vib = 63; module_param(force_vib, uint, 0644);
 static uint touch_tick = 18; module_param(touch_tick, uint, 0644);
+static uint debug_touch = 0; module_param(debug_touch, uint, 0644);
 static int force_prev = 0, npoints_prev = 0;
+static unsigned long last_frame_jiffies = 0;
 static bool force_fired = false, was_force_touch = false;
 static struct work_struct bt_init_work;
 static struct hid_device *bt_hdev = NULL;
@@ -372,8 +374,10 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 	case TRACKPAD_REPORT_ID:
 	case TRACKPAD2_BT_REPORT_ID:
 		/* Expect four bytes of prefix, and N*9 bytes of touch data. */
-		if (size < 4 || ((size - 4) % 9) != 0)
+		if (size < 4 || ((size - 4) % 9) != 0) {
+			if (debug_touch) hid_info(hdev, "dropped rid=%02x size=%d\n", data[0], size);
 			return 0;
+		}
 		npoints = (size - 4) / 9;
 		if (npoints > 15) {
 			hid_warn(hdev, "invalid size value (%d) for TRACKPAD_REPORT_ID\n",
@@ -394,8 +398,10 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		break;
 	case TRACKPAD2_USB_REPORT_ID:
 		/* Expect twelve bytes of prefix and N*9 bytes of touch data. */
-		if (size < 12 || ((size - 12) % 9) != 0)
+		if (size < 12 || ((size - 12) % 9) != 0) {
+			if (debug_touch) hid_info(hdev, "dropped rid=%02x size=%d\n", data[0], size);
 			return 0;
+		}
 		npoints = (size - 12) / 9;
 		if (npoints > 15) {
 			hid_warn(hdev, "invalid size value (%d) for TRACKPAD2_USB_REPORT_ID\n",
@@ -487,6 +493,9 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		if (force_prev==0 && force_click==1) { if (msc->force_vib_down) { msc->force_vib_down[3]=(u8)force_vib; msc->force_vib_down[6]=msc->force_vib_down[11]=(u8)(10+force_vib*30/63); } hid_hw_output_report(hdev, msc->force_vib_down?msc->force_vib_down:msc->vib_down, 15); force_fired=true; was_force_touch=true; }
 		else if (force_prev==1 && force_click==0) hid_hw_output_report(hdev, msc->vib_up, 15);
 		if (npoints==0 || (clicks==0 && !force_click)) was_force_touch=false;
+		if (time_after(jiffies, last_frame_jiffies + msecs_to_jiffies(150))) npoints_prev = 0;
+		last_frame_jiffies = jiffies;
+		if (debug_touch) hid_info(hdev, "touch rid=%02x size=%d np=%d prev=%d clicks=%d fc=%d tick=%u\n", data[0], size, npoints, npoints_prev, clicks, force_click, touch_tick);
 		if (touch_tick>0 && npoints>npoints_prev && !clicks && !force_click && msc->touch_vib) { msc->touch_vib[3]=(u8)touch_tick; hid_hw_output_report(hdev, msc->touch_vib, 15); }
 		clicks_prev=clicks; force_prev=force_click; npoints_prev=npoints;
 	} else if (host_click && (data[0] == TRACKPAD2_USB_REPORT_ID)) {
@@ -498,6 +507,9 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 		if (force_prev==0 && force_click==1) { struct urb *uf=usb_alloc_urb(0,GFP_KERNEL); if (uf) { if (msc->force_vib_down) { msc->force_vib_down[2]=(u8)force_vib; msc->force_vib_down[5]=msc->force_vib_down[10]=(u8)(10+force_vib*30/63); } usb_fill_int_urb(uf,udev,usb_sndintpipe(udev,0x04),msc->force_vib_down?msc->force_vib_down:msc->vib_down,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(uf,GFP_KERNEL); } force_fired=true; was_force_touch=true; }
 		else if (force_prev==1 && force_click==0) { struct urb *ufu=usb_alloc_urb(0,GFP_KERNEL); if (ufu) { usb_fill_int_urb(ufu,udev,usb_sndintpipe(udev,0x04),msc->vib_up,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(ufu,GFP_KERNEL); } }
 		if (npoints==0 || (clicks==0 && !force_click)) was_force_touch=false;
+		if (time_after(jiffies, last_frame_jiffies + msecs_to_jiffies(150))) npoints_prev = 0;
+		last_frame_jiffies = jiffies;
+		if (debug_touch) hid_info(hdev, "touch rid=%02x size=%d np=%d prev=%d clicks=%d fc=%d tick=%u\n", data[0], size, npoints, npoints_prev, clicks, force_click, touch_tick);
 		if (touch_tick>0 && npoints>npoints_prev && !clicks && !force_click && msc->touch_vib) { struct urb *ut=usb_alloc_urb(0,GFP_KERNEL); if (ut) { msc->touch_vib[2]=(u8)touch_tick; usb_fill_int_urb(ut,udev,usb_sndintpipe(udev,0x04),msc->touch_vib,14,magicmouse_sendint_callback,hdev,2); usb_submit_urb(ut,GFP_KERNEL); } }
 		clicks_prev=clicks; force_prev=force_click; npoints_prev=npoints;
 	} else if (host_click && (data[0] == TRACKPAD2_USB_REPORT_ID)) {
