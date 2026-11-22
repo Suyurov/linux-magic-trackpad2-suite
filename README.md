@@ -20,6 +20,9 @@ app with a pressure test window. Works over **Bluetooth** (USB is supported by t
   the system, English and Russian, and a save indicator (no pop-up dialogs).
 - **Pressure test window:** a live view of the pressure with a liquid-style bubble, a progress ring,
   colour stages (green → orange → red), and the same two-tap feedback as above. Open it from the settings app.
+- **Triple tap at 100% pressure:** three strong taps when the press reaches its maximum, as a "stop" signal.
+- **Feedback strength:** separate sliders for the Force Touch double tap and the 100% triple tap.
+- **Click release strength:** a slider that sets how strong the release pulse is, applied immediately.
 
 ## Screenshots
 
