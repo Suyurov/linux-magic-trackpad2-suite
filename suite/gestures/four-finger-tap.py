@@ -49,6 +49,7 @@ def load_settings():
         "hold_ms": int(data.get("force_hold_ms", 225)),
         "gap_ms": int(data.get("force_tap_gap_ms", 100)),
         "gesture_gap_ms": int(data.get("gesture_tap_gap_ms", 45)),
+        "max_strength": int(data.get("max_feedback_strength", 60)),
     }
 
 def haptic_pulse(strength):
@@ -73,6 +74,27 @@ def signal_success(pulses=2, strength=None, gap_ms=None):
         if i:
             time.sleep(gap)
         haptic_pulse(s_val)
+
+FULL_P = 253          # 100% pressure, as in the pressure test window
+FULL_REARM_P = 230    # must drop below this before the full-press signal can fire again
+FULL = {"fired": False}
+
+def triple_pulse():
+    """Three strong taps when the press reaches 100%: 'stop it' signal."""
+    st = load_settings()
+    if not st["feedback"]:
+        return
+    for i in range(3):
+        if i:
+            time.sleep(st["gap_ms"] / 1000.0)
+        haptic_pulse(st["max_strength"])
+
+def check_full_press(p):
+    if p >= FULL_P and not FULL["fired"]:
+        FULL["fired"] = True
+        threading.Thread(target=triple_pulse, daemon=True).start()
+    elif p < FULL_REARM_P:
+        FULL["fired"] = False
 
 def virtual_mouse():
     """Separate mouse device: libinput ignores right/middle buttons coming from a clickpad."""
@@ -216,6 +238,7 @@ while True:
         sy = {}
         moved = False
         pending_timer = None
+        press_p = {}
 
         def cancel_timer():
             global pending_timer
@@ -239,6 +262,9 @@ while True:
                     elif slot in sy and abs(event.value - sy[slot]) > 130:
                         moved = True
                         cancel_timer()
+                elif event.code == evdev.ecodes.ABS_MT_PRESSURE:
+                    press_p[slot] = event.value
+                    check_full_press(max(press_p.values()))
 
             elif event.type == evdev.ecodes.EV_KEY:
                 if event.code == evdev.ecodes.BTN_TOUCH and event.value == 0:
@@ -247,6 +273,8 @@ while True:
                     quint_active = False
                     sx.clear()
                     sy.clear()
+                    press_p.clear()
+                    FULL["fired"] = False
 
                 elif event.code == evdev.ecodes.BTN_TRIGGER_HAPPY1:
                     if event.value == 1:
