@@ -36,7 +36,7 @@ app with a pressure test window. Works over **Bluetooth** (USB is supported by t
   <img src="docs/screenshots/04-pressure-test.png" width="49%" alt="Pressure test window">
 </p>
 
-## Installation (Arch Linux)
+## Installation
 
 ```bash
 git clone https://github.com/Suyurov/linux-magic-trackpad2-suite.git
